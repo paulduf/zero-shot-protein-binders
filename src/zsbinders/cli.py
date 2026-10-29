@@ -83,7 +83,9 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
     y_true = evaluate.binarize(scored["y_true"])
 
     candidates = {"zero-shot Jev": scored["p_binder"].to_numpy(dtype=float)}
-    candidates.update(baselines.supervised_scores(scored, group_by_target=args.by_target, seed=args.seed))
+    candidates.update(baselines.supervised_scores(
+        scored, group_by_target=args.by_target, seed=args.seed, foundation_models=tuple(args.tfm)
+    ))
     candidates.update(baselines.single_feature_scores(scored))
 
     rows = {}
@@ -142,6 +144,10 @@ def main(argv: list[str] | None = None) -> None:
     benchmark.add_argument("scored")
     benchmark.add_argument("--by-target", action="store_true", help="hold out whole antigens in CV")
     benchmark.add_argument("--seed", type=int, default=1337)
+    benchmark.add_argument(
+        "--tfm", action="append", default=[], choices=baselines.FOUNDATION_MODELS,
+        help="also score a tabular foundation model (repeatable; needs the [tfm] extra)",
+    )
     benchmark.add_argument("--out")
     benchmark.set_defaults(func=cmd_benchmark)
 
