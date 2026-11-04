@@ -19,6 +19,7 @@ zsbinders = "zsbinders.cli:main"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "jupyter>=1.0"]
+tfm = ["tabicl>=2.2"]
 
 [build-system]
 requires = ["hatchling"]

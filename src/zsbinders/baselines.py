@@ -36,6 +36,22 @@ SINGLE_FEATURE_SCORES = {
 }
 
 
+def tabicl_classifier(seed: int):
+    """TabICLv2, an in-context tabular foundation model: no gradient training per fold.
+
+    It ordinal-encodes string columns itself and maps an antigen unseen in the context to
+    its own code, so it takes the raw feature frame rather than the one-hot pipeline.
+    """
+    from tabicl import TabICLClassifier
+
+    return TabICLClassifier(random_state=seed)
+
+
+# Optional baselines that need extra dependencies (`pip install -e ".[tfm]"`) and model
+# weights, so they only run when asked for by name.
+FOUNDATION_MODELS = {"tabicl": ("TabICLv2", tabicl_classifier)}
+
+
 def make_pipeline(estimator, numeric: list[str], categorical: list[str]) -> Pipeline:
     numeric_steps = [("impute", SimpleImputer(strategy="median"))]
     if isinstance(estimator, LogisticRegression):
@@ -50,7 +66,10 @@ def make_pipeline(estimator, numeric: list[str], categorical: list[str]) -> Pipe
 
 
 def supervised_scores(
-    df: pd.DataFrame, group_by_target: bool = False, seed: int = 1337
+    df: pd.DataFrame,
+    group_by_target: bool = False,
+    seed: int = 1337,
+    foundation_models: tuple[str, ...] = (),
 ) -> dict[str, np.ndarray]:
     """Out-of-fold p(binder) for each trained baseline.
 
@@ -80,6 +99,13 @@ def supervised_scores(
         pipeline = make_pipeline(estimator, numeric, categorical)
         probabilities = cross_val_predict(
             pipeline, df, y, cv=splitter, groups=groups, method="predict_proba"
+        )
+        scores[name] = probabilities[:, 1]
+
+    for key in foundation_models:
+        name, factory = FOUNDATION_MODELS[key]
+        probabilities = cross_val_predict(
+            factory(seed), df[numeric + categorical], y, cv=splitter, groups=groups, method="predict_proba"
         )
         scores[name] = probabilities[:, 1]
     return scores

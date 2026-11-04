@@ -95,3 +95,34 @@ def test_rate_limiter_holds_the_aggregate_rate():
     for _ in range(10):
         limiter.acquire()
     assert time.monotonic() - start >= 0.45
+
+
+def test_foundation_models_score_on_the_same_folds(scored, monkeypatch):
+    """A registered foundation model gets the raw frame, string columns included, and no label."""
+    seen_columns = []
+
+    def stand_in(seed):
+        from sklearn.linear_model import LogisticRegression
+
+        class Recording(baselines.Pipeline):
+            def fit(self, X, y):
+                seen_columns.append(list(X.columns))
+                return super().fit(X, y)
+
+        numeric = feature_columns(scored)
+        steps = baselines.make_pipeline(LogisticRegression(), numeric, baselines.CATEGORICAL_COLUMNS).steps
+        return Recording(steps)
+
+    monkeypatch.setitem(baselines.FOUNDATION_MODELS, "stand-in", ("stand-in", stand_in))
+    for by_target in (False, True):
+        seen_columns.clear()
+        scores = baselines.supervised_scores(scored, group_by_target=by_target, seed=0, foundation_models=("stand-in",))
+        assert evaluate.metrics(evaluate.binarize(scored["y_true"]), scores["stand-in"])["roc_auc"] > 0.9
+        assert seen_columns and all("target" in c and not {"y_true", "p_binder", "uuid"} & set(c) for c in seen_columns)
+
+
+def test_tabicl_separates_the_toy_signal(scored):
+    """Downloads the TabICLv2 checkpoint on first run."""
+    pytest.importorskip("tabicl", reason="needs the [tfm] extra")
+    scores = baselines.supervised_scores(scored, seed=0, foundation_models=("tabicl",))["TabICLv2"]
+    assert evaluate.metrics(evaluate.binarize(scored["y_true"]), scores)["roc_auc"] > 0.9

@@ -83,7 +83,9 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
     y_true = evaluate.binarize(scored["y_true"])
 
     candidates = {"zero-shot Jev": scored["p_binder"].to_numpy(dtype=float)}
-    candidates.update(baselines.supervised_scores(scored, group_by_target=args.by_target, seed=args.seed))
+    candidates.update(baselines.supervised_scores(
+        scored, group_by_target=args.by_target, seed=args.seed, foundation_models=tuple(args.tfm)
+    ))
     candidates.update(baselines.single_feature_scores(scored))
 
     rows = {}
@@ -92,8 +94,9 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
         rows[f"{name} @best-f1"] = evaluate.metrics(y_true, scores, evaluate.best_f1_threshold(y_true, scores))
 
     table = evaluate.metrics_frame(rows).sort_values("roc_auc", ascending=False)
+    prefix = "benchmark_by_target" if args.by_target else "benchmark"
     out_path = Path(args.out) if args.out else Path(args.scored).with_name(
-        Path(args.scored).stem.replace("scored", "benchmark") + ".csv"
+        Path(args.scored).stem.replace("scored", prefix, 1) + ".csv"
     )
     table.to_csv(out_path)
     print(table.to_string(float_format=lambda v: f"{v:.3f}"))
@@ -142,6 +145,10 @@ def main(argv: list[str] | None = None) -> None:
     benchmark.add_argument("scored")
     benchmark.add_argument("--by-target", action="store_true", help="hold out whole antigens in CV")
     benchmark.add_argument("--seed", type=int, default=1337)
+    benchmark.add_argument(
+        "--tfm", action="append", default=[], choices=baselines.FOUNDATION_MODELS,
+        help="also score a tabular foundation model (repeatable; needs the [tfm] extra)",
+    )
     benchmark.add_argument("--out")
     benchmark.set_defaults(func=cmd_benchmark)
 
