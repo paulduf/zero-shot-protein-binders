@@ -32,15 +32,17 @@ out-of-fold predictions:
 
 | scorer | ROC-AUC | balanced accuracy | MCC |
 |---|---|---|---|
+| TabICLv2 (5-fold, in-context) | 0.883 | 0.810 | 0.594 |
 | logistic regression (5-fold) | 0.861 | 0.781 | 0.540 |
-| gradient boosting (5-fold) | 0.854 | 0.782 | 0.544 |
+| gradient boosting (5-fold) | 0.855 | 0.777 | 0.543 |
 | `plddt_binder_mean` alone | 0.743 | 0.716 | 0.395 |
 | `sc_dockq_mean` alone | 0.705 | 0.656 | 0.278 |
 | `ipsae_min_mean` alone | 0.701 | 0.672 | 0.308 |
 | **zero-shot Jev** | **0.687** | **0.652** | **0.275** |
 | `pae_interface_mean_mean` alone | 0.663 | 0.635 | 0.241 |
 
-It sits 0.17 AUC below a trained model and 0.06 below the single best cofolding metric. It
+It sits 0.17 AUC below logistic regression, 0.20 below the TabICLv2 tabular foundation
+model, and 0.06 below the single best cofolding metric. It
 extracts no signal that is not already in one column of what it was shown.
 
 ### The trained models are mostly learning per-target base rates
@@ -49,13 +51,17 @@ Hold out whole antigens instead of random folds and the supervised edge disappea
 
 | scorer | AUC, random folds | AUC, held-out antigen |
 |---|---|---|
+| TabICLv2 | 0.883 | 0.597 |
 | logistic regression | 0.861 | 0.613 |
-| gradient boosting | 0.854 | 0.562 |
+| gradient boosting | 0.855 | 0.565 |
 | `plddt_binder_mean` alone | 0.743 | 0.743 |
 | zero-shot Jev | 0.687 | 0.687 |
 
 On an antigen no model has seen, a single cofolding metric beats everything else here and the
-zero-shot classifier beats both trained models. Per-target accuracy ranges from 0.31 (BHRF1)
+zero-shot classifier beats all three trained models. TabICLv2, which gets no per-fold
+training at all and only sees the other folds as in-context examples, is the strongest model
+on random folds and drops furthest on unseen antigens: it is as good at exploiting per-target
+base rates as the trained models, not better at generalising past them. Per-target accuracy ranges from 0.31 (BHRF1)
 to 0.88 (Cas9), so target difficulty dominates the result.
 
 ### Ranking is usable; the probabilities are not
@@ -76,14 +82,18 @@ calibration, not its discrimination.
 
 ![Score distributions](figures/score_distributions.png)
 
-Twist labels tell the same story at lower numbers: trained models at 0.84 AUC, zero-shot at
-0.648, below every single-metric baseline except interface PAE. Full tables for all four runs
+Twist labels tell the same story at lower numbers: trained models at 0.84 AUC and TabICLv2
+at 0.873 on random folds, zero-shot at 0.648, below every single-metric baseline except
+interface PAE. On held-out antigens TabICLv2 holds up better on Twist (0.681, against 0.612
+for logistic regression and 0.640 for gradient boosting) but still trails
+`plddt_binder_mean` alone (0.695). Full tables for all four runs
 and both CV schemes are in `results/benchmark_*.csv`.
 
 ## Install
 
 ```bash
 uv venv && uv pip install -e ".[dev]"
+uv pip install -e ".[dev,tfm]"   # optional: TabICLv2 baseline (PyTorch, weights from Hugging Face)
 ```
 
 ## Run
@@ -95,6 +105,7 @@ zsbinders score --label adaptyv --limit 100         # smoke test on a balanced s
 zsbinders score --label adaptyv --resume            # full run, skipping anything already scored
 zsbinders benchmark results/scored_adaptyv_Qwen3.8-27B-classifier.csv
 zsbinders benchmark results/scored_adaptyv_Qwen3.8-27B-classifier.csv --by-target
+zsbinders benchmark results/scored_adaptyv_Qwen3.8-27B-classifier.csv --tfm tabicl  # add TabICLv2
 zsbinders report results/scored_adaptyv_Qwen3.8-27B-classifier.csv
 zsbinders figures results/scored_*.csv
 ```
@@ -132,6 +143,12 @@ Feature tables cache to `data/` and are not committed; rebuild them with
   antigens, which is the harder and more honest setting: stratified folds let a model learn
   each target's base rate.
 - Only Boltz-2 cofolding runs are used.
+- TabICLv2 (`--tfm tabicl`) is a pretrained in-context tabular model: each fold's training
+  rows are its context, with no gradient updates. It runs on CPU in about two minutes per
+  benchmark for ~1,100 designs. Its probabilities are poorly calibrated on held-out antigens
+  (recall near zero at 0.5), so compare it at the tuned threshold or by ROC-AUC.
+- The supervised and TabICLv2 rows were regenerated with scikit-learn 1.9.1 and tabicl 2.2.0 in
+  one pass; gradient boosting moved by at most 0.003 AUC from the previous tables.
 
 ## References
 

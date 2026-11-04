@@ -94,8 +94,9 @@ def cmd_benchmark(args: argparse.Namespace) -> None:
         rows[f"{name} @best-f1"] = evaluate.metrics(y_true, scores, evaluate.best_f1_threshold(y_true, scores))
 
     table = evaluate.metrics_frame(rows).sort_values("roc_auc", ascending=False)
+    prefix = "benchmark_by_target" if args.by_target else "benchmark"
     out_path = Path(args.out) if args.out else Path(args.scored).with_name(
-        Path(args.scored).stem.replace("scored", "benchmark") + ".csv"
+        Path(args.scored).stem.replace("scored", prefix, 1) + ".csv"
     )
     table.to_csv(out_path)
     print(table.to_string(float_format=lambda v: f"{v:.3f}"))
